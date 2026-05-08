@@ -31,6 +31,17 @@ func provideExecutor(e *executor.LocalExecutor) executor.Executor { return e }
 
 func provideLogWriter(s logstream.Stream) logstream.Writer { return s }
 
+func provideQueue(cfg *runnerconfig.Config, rdb *redis.Client) queue.Queue {
+	return queue.NewRedisQueue(
+		rdb,
+		cfg.Worker.QueueName,
+		cfg.Worker.DLQName,
+		cfg.Worker.QueueName+":group",
+		cfg.Cluster.NodeID+":worker",
+		cfg.Worker.MaxRetries,
+	)
+}
+
 func main() {
 	app := fx.New(
 		fx.Provide(
@@ -39,7 +50,7 @@ func main() {
 			provideTelemetry,
 			provideRedis,
 			provideConcurrency,
-			queue.NewRedisQueue,
+			provideQueue,
 			locks.NewRedisLocker,
 			logstream.NewRedisStream,
 			provideLogWriter,

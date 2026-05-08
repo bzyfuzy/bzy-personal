@@ -12,7 +12,6 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	ifconfig "github.com/bzyfuzy/bzy-personal/apps/bzy-interface/config"
-	"github.com/bzyfuzy/bzy-personal/pkg/health"
 	"github.com/bzyfuzy/bzy-personal/apps/bzy-interface/internal/auth"
 	"github.com/bzyfuzy/bzy-personal/apps/bzy-interface/internal/gateway"
 	"github.com/bzyfuzy/bzy-personal/apps/bzy-interface/internal/httpserver"
@@ -20,6 +19,7 @@ import (
 	"github.com/bzyfuzy/bzy-personal/apps/bzy-interface/internal/session"
 	"github.com/bzyfuzy/bzy-personal/apps/bzy-interface/internal/streaming"
 	"github.com/bzyfuzy/bzy-personal/apps/bzy-interface/internal/ws"
+	"github.com/bzyfuzy/bzy-personal/pkg/health"
 	"github.com/bzyfuzy/bzy-personal/pkg/logging"
 	"github.com/bzyfuzy/bzy-personal/pkg/telemetry"
 )
@@ -32,12 +32,12 @@ func main() {
 			provideTelemetry,
 			provideRedis,
 			provideHealthChecker,
-			auth.NewJWTService,
+			provideJWT,
 			auth.NewAPIKeyService,
-			session.NewManager,
-			gateway.NewBrainClient,
-			gateway.NewRunnerClient,
-			middleware.New,
+			provideSessionManager,
+			provideBrainClient,
+			provideRunnerClient,
+			provideMiddleware,
 			streaming.NewHub,
 			ws.NewHub,
 			httpserver.New,
@@ -52,10 +52,6 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	go func() { <-quit; app.Stop(context.Background()) }()
 	app.Run()
-}
-
-func provideHealthChecker(cfg *ifconfig.Config) *health.Checker {
-	return health.New(cfg.ServiceName)
 }
 
 func provideLogger(cfg *ifconfig.Config) (*zap.Logger, error) {
@@ -82,6 +78,34 @@ func provideRedis(cfg *ifconfig.Config) (*redis.Client, error) {
 		Password: cfg.Redis.Password,
 	})
 	return rdb, rdb.Ping(context.Background()).Err()
+}
+
+func provideHealthChecker(cfg *ifconfig.Config) *health.Checker {
+	return health.New(cfg.ServiceName)
+}
+
+func provideJWT(cfg *ifconfig.Config) *auth.JWTService {
+	return auth.NewJWTService(cfg.Auth.JWTSecret, cfg.Auth.JWTExpiry, cfg.Auth.RefreshExpiry)
+}
+
+func provideSessionManager(cfg *ifconfig.Config, rdb *redis.Client) *session.Manager {
+	return session.NewManager(rdb, cfg.Auth.JWTExpiry)
+}
+
+func provideBrainClient(cfg *ifconfig.Config) (*gateway.BrainClient, error) {
+	return gateway.NewBrainClient(cfg.Gateway.BrainAddr)
+}
+
+func provideRunnerClient(cfg *ifconfig.Config) (*gateway.RunnerClient, error) {
+	return gateway.NewRunnerClient(cfg.Gateway.RunnerAddr)
+}
+
+func provideMiddleware(cfg *ifconfig.Config, jwt *auth.JWTService, apiKeys *auth.APIKeyService, logger *zap.Logger) *middleware.Bundle {
+	rps := cfg.RateLimit.RequestsPerMin / 60
+	if rps < 1 {
+		rps = 1
+	}
+	return middleware.New(jwt, apiKeys, rps, cfg.RateLimit.BurstSize, logger)
 }
 
 func startHTTPServer(lc fx.Lifecycle, srv *httpserver.Server, logger *zap.Logger) {
