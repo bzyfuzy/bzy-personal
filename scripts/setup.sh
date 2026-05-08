@@ -53,6 +53,17 @@ until docker compose -f deploy/docker/docker-compose.dev.yml exec postgres \
   sleep 1
 done
 
+# ── Create databases ──────────────────────────────────────────────────────────
+echo "▶ Creating databases..."
+for db in bzy_brain bzy_runner; do
+  docker compose -f deploy/docker/docker-compose.dev.yml exec -T postgres \
+    psql -U bzy -tc "SELECT 1 FROM pg_database WHERE datname='${db}'" \
+    | grep -q 1 \
+    || docker compose -f deploy/docker/docker-compose.dev.yml exec -T postgres \
+         createdb -U bzy "${db}"
+  echo "  ${db} ready"
+done
+
 # ── Run migrations ────────────────────────────────────────────────────────────
 echo "▶ Running brain migrations..."
 migrate -path migrations/brain \

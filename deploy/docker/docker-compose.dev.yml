@@ -1,4 +1,3 @@
-version: "3.9"
 # Dev infrastructure only — run services locally with `go run ./apps/*/cmd/...`
 name: bzy-dev
 
