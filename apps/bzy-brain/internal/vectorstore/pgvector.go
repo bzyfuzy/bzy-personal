@@ -28,7 +28,7 @@ func NewPgVector(cfg *brainconfig.Config) (*PgVector, error) {
 	}
 	db.SetMaxOpenConns(cfg.Database.MaxOpenConns)
 	db.SetMaxIdleConns(cfg.Database.MaxIdleConns)
-	db.SetConnMaxLifetime(time.Duration(cfg.Database.ConnMaxLifetimeSec) * time.Second)
+	db.SetConnMaxLifetime(cfg.Database.ConnMaxLifetime)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

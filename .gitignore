@@ -9,6 +9,7 @@ dist/
 
 # Go workspace sum
 go.work.sum
+*.sum
 
 # Test artifacts
 *.test

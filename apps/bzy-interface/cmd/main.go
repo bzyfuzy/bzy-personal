@@ -12,6 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	ifconfig "github.com/bzyfuzy/bzy-personal/apps/bzy-interface/config"
+	"github.com/bzyfuzy/bzy-personal/pkg/health"
 	"github.com/bzyfuzy/bzy-personal/apps/bzy-interface/internal/auth"
 	"github.com/bzyfuzy/bzy-personal/apps/bzy-interface/internal/gateway"
 	"github.com/bzyfuzy/bzy-personal/apps/bzy-interface/internal/httpserver"
@@ -30,6 +31,7 @@ func main() {
 			provideLogger,
 			provideTelemetry,
 			provideRedis,
+			provideHealthChecker,
 			auth.NewJWTService,
 			auth.NewAPIKeyService,
 			session.NewManager,
@@ -50,6 +52,10 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	go func() { <-quit; app.Stop(context.Background()) }()
 	app.Run()
+}
+
+func provideHealthChecker(cfg *ifconfig.Config) *health.Checker {
+	return health.New(cfg.ServiceName)
 }
 
 func provideLogger(cfg *ifconfig.Config) (*zap.Logger, error) {

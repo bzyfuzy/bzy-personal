@@ -166,6 +166,12 @@ setup: ## Bootstrap dev environment (install tools, migrate db, install npm deps
 	@bash scripts/setup.sh
 	npm --prefix apps/bzy-ui install
 
+.PHONY: seed
+seed: ## Re-run the dev seed (idempotent — safe to run multiple times)
+	docker compose -f deploy/docker/docker-compose.dev.yml exec -T postgres \
+	  psql -U bzy -d bzy_brain < scripts/seed.sql
+	@echo "Seeded: admin@bzy.local / admin"
+
 .PHONY: env
 env: ## Copy .env.example files
 	@for dir in apps/bzy-brain apps/bzy-runner apps/bzy-interface; do \

@@ -73,8 +73,16 @@ echo "▶ Running runner migrations..."
 migrate -path migrations/runner \
   -database "postgres://bzy:bzy_dev@localhost:5432/bzy_runner?sslmode=disable" up
 
+# ── Seed default data ─────────────────────────────────────────────────────────
+echo "▶ Seeding default admin user..."
+docker compose -f deploy/docker/docker-compose.dev.yml exec -T postgres \
+  psql -U bzy -d bzy_brain < scripts/seed.sql
+
 echo ""
 echo "✅ Setup complete!"
+echo ""
+echo "  Default credentials:  admin@bzy.local / admin"
+echo "  ⚠️  Change the admin password before exposing to any network."
 echo ""
 echo "  Run services:"
 echo "    make run-bzy-brain     → gRPC :50051"

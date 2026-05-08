@@ -25,6 +25,12 @@ import (
 	"github.com/bzyfuzy/bzy-personal/pkg/telemetry"
 )
 
+func provideConcurrency(cfg *runnerconfig.Config) int { return cfg.Worker.Concurrency }
+
+func provideExecutor(e *executor.LocalExecutor) executor.Executor { return e }
+
+func provideLogWriter(s logstream.Stream) logstream.Writer { return s }
+
 func main() {
 	app := fx.New(
 		fx.Provide(
@@ -32,13 +38,15 @@ func main() {
 			provideLogger,
 			provideTelemetry,
 			provideRedis,
+			provideConcurrency,
 			queue.NewRedisQueue,
 			locks.NewRedisLocker,
 			logstream.NewRedisStream,
+			provideLogWriter,
 			heartbeat.NewService,
 			cluster.NewRegistry,
-			executor.NewDockerExecutor,
 			executor.NewLocalExecutor,
+			provideExecutor,
 			worker.NewPool,
 			scheduler.NewCronScheduler,
 		),
