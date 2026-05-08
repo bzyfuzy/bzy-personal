@@ -16,4 +16,5 @@ require (
 	github.com/spf13/viper v1.19.0
 	github.com/redis/go-redis/v9 v9.6.1
 	github.com/nats-io/nats.go v1.37.0
+	github.com/gorilla/websocket v1.5.3
 )

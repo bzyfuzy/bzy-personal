@@ -5,4 +5,5 @@ use (
 	./apps/bzy-brain
 	./apps/bzy-runner
 	./apps/bzy-interface
+	./examples
 )
