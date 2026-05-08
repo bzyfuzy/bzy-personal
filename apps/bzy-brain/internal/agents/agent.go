@@ -3,6 +3,7 @@ package agents
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -254,4 +255,3 @@ func (e *MaxStepsExceededError) Error() string {
 	return fmt.Sprintf("agent exceeded max steps: %d", e.Steps)
 }
 
-import "fmt"

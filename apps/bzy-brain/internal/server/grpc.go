@@ -2,6 +2,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net"
 
@@ -61,14 +62,14 @@ func (s *GRPCServer) Stop()         { s.srv.Stop() }
 // ─── Interceptors ─────────────────────────────────────────────────────────────
 
 func loggingInterceptor(logger *zap.Logger) grpc.UnaryServerInterceptor {
-	return func(ctx interface{}, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		logger.Debug("grpc call", zap.String("method", info.FullMethod))
 		return handler(ctx, req)
 	}
 }
 
 func recoveryInterceptor(logger *zap.Logger) grpc.UnaryServerInterceptor {
-	return func(ctx interface{}, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 		defer func() {
 			if r := recover(); r != nil {
 				logger.Error("grpc panic", zap.Any("panic", r), zap.String("method", info.FullMethod))

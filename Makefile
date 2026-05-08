@@ -128,6 +128,20 @@ down: ## Stop all services
 dev: ## Start infrastructure only (postgres, redis, nats) for local dev
 	docker compose -f deploy/docker/docker-compose.dev.yml up -d
 
+.PHONY: dev-ui
+dev-ui: ## Start the Vite dev server for bzy-ui
+	npm --prefix apps/bzy-ui run dev
+
+.PHONY: dev-all
+dev-all: dev ## Start infra + all Go services + UI (Ctrl-C stops all)
+	@echo "Starting services..."
+	@trap 'kill 0' INT; \
+	  (cd apps/bzy-brain     && go run ./cmd/) & \
+	  (cd apps/bzy-runner    && go run ./cmd/) & \
+	  (cd apps/bzy-interface && go run ./cmd/) & \
+	  (npm --prefix apps/bzy-ui run dev)       & \
+	  wait
+
 .PHONY: dev-down
 dev-down: ## Stop dev infrastructure
 	docker compose -f deploy/docker/docker-compose.dev.yml down -v
