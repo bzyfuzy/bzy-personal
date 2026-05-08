@@ -10,6 +10,8 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
+	"github.com/redis/go-redis/v9"
+
 	runnerconfig "github.com/bzyfuzy/bzy-personal/apps/bzy-runner/config"
 	"github.com/bzyfuzy/bzy-personal/apps/bzy-runner/internal/cluster"
 	"github.com/bzyfuzy/bzy-personal/apps/bzy-runner/internal/executor"

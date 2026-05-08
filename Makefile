@@ -130,6 +130,7 @@ dev: ## Start infrastructure only (postgres, redis, nats) for local dev
 
 .PHONY: dev-ui
 dev-ui: ## Start the Vite dev server for bzy-ui
+	npm --prefix apps/bzy-ui install --prefer-offline
 	npm --prefix apps/bzy-ui run dev
 
 .PHONY: dev-all
@@ -161,8 +162,9 @@ k8s-delete: ## Delete k8s manifests
 
 # ── Setup ──────────────────────────────────────────────────────────────────────
 .PHONY: setup
-setup: ## Bootstrap dev environment (install tools)
+setup: ## Bootstrap dev environment (install tools, migrate db, install npm deps)
 	@bash scripts/setup.sh
+	npm --prefix apps/bzy-ui install
 
 .PHONY: env
 env: ## Copy .env.example files

@@ -9,6 +9,8 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
+	"github.com/redis/go-redis/v9"
+
 	ifconfig "github.com/bzyfuzy/bzy-personal/apps/bzy-interface/config"
 	"github.com/bzyfuzy/bzy-personal/apps/bzy-interface/internal/auth"
 	"github.com/bzyfuzy/bzy-personal/apps/bzy-interface/internal/gateway"
