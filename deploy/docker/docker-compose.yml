@@ -1,0 +1,234 @@
+version: "3.9"
+
+# Production-style Docker Compose for running all bzy-personal services + infra.
+# For local dev infrastructure only, use docker-compose.dev.yml instead.
+
+name: bzy-personal
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-restart: &default-restart
+  restart: unless-stopped
+
+services:
+
+  # ── Infrastructure ─────────────────────────────────────────────────────────
+
+  postgres:
+    image: pgvector/pgvector:pg17
+    <<: *default-restart
+    environment:
+      POSTGRES_USER: bzy
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bzy_dev_password}
+      POSTGRES_DB: bzy_brain
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bzy -d bzy_brain"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  redis:
+    image: redis:7.4-alpine
+    <<: *default-restart
+    command: >
+      redis-server
+        --maxmemory 512mb
+        --maxmemory-policy allkeys-lru
+        --save 60 1
+        --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging: *default-logging
+
+  nats:
+    image: nats:2.10-alpine
+    <<: *default-restart
+    command: >
+      -js
+      --store_dir /data
+      --cluster_name bzy-cluster
+    volumes:
+      - nats_data:/data
+    ports:
+      - "4222:4222"   # client
+      - "8222:8222"   # monitoring
+    healthcheck:
+      test: ["CMD-SHELL", "nats-server --health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+
+  # ── Observability ──────────────────────────────────────────────────────────
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    <<: *default-restart
+    command: ["--config=/etc/otel-collector.yaml"]
+    volumes:
+      - ./otel-collector.yaml:/etc/otel-collector.yaml:ro
+    ports:
+      - "4317:4317"  # gRPC
+      - "4318:4318"  # HTTP
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    <<: *default-restart
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"  # UI
+      - "4317:4317"
+    logging: *default-logging
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    <<: *default-restart
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    logging: *default-logging
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    <<: *default-restart
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    logging: *default-logging
+
+  # ── Applications ───────────────────────────────────────────────────────────
+
+  bzy-brain:
+    image: ghcr.io/bzyfuzy/bzy-brain:${VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: apps/bzy-brain/Dockerfile
+    <<: *default-restart
+    environment:
+      BRAIN_ENV: production
+      BRAIN_LOG_LEVEL: info
+      BRAIN_SERVICE_NAME: bzy-brain
+      BRAIN_GRPC_ADDR: :50051
+      BRAIN_DATABASE_DSN: postgres://bzy:${POSTGRES_PASSWORD:-bzy_dev_password}@postgres:5432/bzy_brain?sslmode=disable
+      BRAIN_REDIS_ADDR: redis:6379
+      BRAIN_NATS_URL: nats://nats:4222
+      BRAIN_TELEMETRY_ENABLED: "true"
+      BRAIN_TELEMETRY_OTLP_ENDPOINT: otel-collector:4317
+      BRAIN_TELEMETRY_SAMPLE_RATE: "0.1"
+      BRAIN_AI_OPENAI_API_KEY: ${OPENAI_API_KEY}
+      BRAIN_AI_DEFAULT_PROVIDER: openai
+    ports:
+      - "50051:50051"
+      - "9091:9090"  # prometheus metrics
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "grpc_health_probe", "-addr=:50051"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *default-logging
+
+  bzy-runner:
+    image: ghcr.io/bzyfuzy/bzy-runner:${VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: apps/bzy-runner/Dockerfile
+    <<: *default-restart
+    environment:
+      RUNNER_ENV: production
+      RUNNER_LOG_LEVEL: info
+      RUNNER_SERVICE_NAME: bzy-runner
+      RUNNER_DATABASE_DSN: postgres://bzy:${POSTGRES_PASSWORD:-bzy_dev_password}@postgres:5432/bzy_runner?sslmode=disable
+      RUNNER_REDIS_ADDR: redis:6379
+      RUNNER_NATS_URL: nats://nats:4222
+      RUNNER_TELEMETRY_ENABLED: "true"
+      RUNNER_TELEMETRY_OTLP_ENDPOINT: otel-collector:4317
+      RUNNER_WORKER_CONCURRENCY: "4"
+      RUNNER_EXECUTOR_TYPE: docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # for Docker executor
+    ports:
+      - "9092:9090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    logging: *default-logging
+
+  bzy-interface:
+    image: ghcr.io/bzyfuzy/bzy-interface:${VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: apps/bzy-interface/Dockerfile
+    <<: *default-restart
+    environment:
+      INTERFACE_ENV: production
+      INTERFACE_LOG_LEVEL: info
+      INTERFACE_SERVICE_NAME: bzy-interface
+      INTERFACE_HTTP_ADDR: :8080
+      INTERFACE_REDIS_ADDR: redis:6379
+      INTERFACE_AUTH_JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
+      INTERFACE_GATEWAY_BRAIN_ADDR: bzy-brain:50051
+      INTERFACE_GATEWAY_RUNNER_ADDR: bzy-runner:50052
+      INTERFACE_TELEMETRY_ENABLED: "true"
+      INTERFACE_TELEMETRY_OTLP_ENDPOINT: otel-collector:4317
+    ports:
+      - "8080:8080"
+      - "9093:9090"
+    depends_on:
+      - bzy-brain
+      - bzy-runner
+      - redis
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+
+volumes:
+  postgres_data:
+  redis_data:
+  nats_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  default:
+    name: bzy-network

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bzy-personal
+  labels:
+    app.kubernetes.io/name: bzy-personal
+    app.kubernetes.io/managed-by: kustomize

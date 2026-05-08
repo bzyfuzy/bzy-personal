@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bzy-runner
+  namespace: bzy-personal
+  labels:
+    app: bzy-runner
+spec:
+  replicas: 3  # scale horizontally for more task throughput
+  selector:
+    matchLabels:
+      app: bzy-runner
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1  # tolerate 1 down during deploys
+  template:
+    metadata:
+      labels:
+        app: bzy-runner
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      serviceAccountName: bzy-runner
+      terminationGracePeriodSeconds: 60  # allow in-flight tasks to complete
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+      containers:
+        - name: bzy-runner
+          image: ghcr.io/bzyfuzy/bzy-runner:latest
+          ports:
+            - name: grpc
+              containerPort: 50052
+            - name: metrics
+              containerPort: 9090
+          env:
+            - name: RUNNER_ENV
+              value: production
+            - name: RUNNER_DATABASE_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: bzy-runner-secrets
+                  key: database-dsn
+            - name: RUNNER_REDIS_ADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: bzy-config
+                  key: redis-addr
+            - name: RUNNER_WORKER_CONCURRENCY
+              value: "4"
+            - name: RUNNER_CLUSTER_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name  # use pod name as node ID
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 9090
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bzy-runner
+  namespace: bzy-personal
+spec:
+  selector:
+    app: bzy-runner
+  ports:
+    - name: grpc
+      port: 50052
+      targetPort: grpc
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bzy-runner
+  namespace: bzy-personal
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: bzy-runner
+  namespace: bzy-personal
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: bzy-runner
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80

@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bzy-brain
+  namespace: bzy-personal
+  labels:
+    app: bzy-brain
+    version: "1.0.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: bzy-brain
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: bzy-brain
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: bzy-brain
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+      containers:
+        - name: bzy-brain
+          image: ghcr.io/bzyfuzy/bzy-brain:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: grpc
+              containerPort: 50051
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          env:
+            - name: BRAIN_ENV
+              value: production
+            - name: BRAIN_DATABASE_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: bzy-brain-secrets
+                  key: database-dsn
+            - name: BRAIN_REDIS_ADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: bzy-config
+                  key: redis-addr
+            - name: BRAIN_AI_OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: bzy-brain-secrets
+                  key: openai-api-key
+            - name: BRAIN_TELEMETRY_ENABLED
+              value: "true"
+            - name: BRAIN_TELEMETRY_OTLP_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: bzy-config
+                  key: otlp-endpoint
+          livenessProbe:
+            grpc:
+              port: 50051
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            grpc:
+              port: 50051
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bzy-brain
+  namespace: bzy-personal
+spec:
+  selector:
+    app: bzy-brain
+  ports:
+    - name: grpc
+      port: 50051
+      targetPort: grpc
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bzy-brain
+  namespace: bzy-personal
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bzy-brain
+  namespace: bzy-personal
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: bzy-brain

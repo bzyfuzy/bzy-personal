@@ -1,0 +1,52 @@
+# Binaries
+bin/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go workspace sum
+go.work.sum
+
+# Test artifacts
+*.test
+*.out
+coverage.html
+coverage.txt
+
+# Environment
+.env
+.env.*
+!.env.example
+*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Docker
+.docker/
+
+# Generated proto
+gen/
+
+# Dependency directories
+vendor/
+
+# Build cache
+.cache/
+
+# Logs
+logs/
+*.log
+
+# Secrets
+*.pem
+*.key
+*.crt
+secrets/

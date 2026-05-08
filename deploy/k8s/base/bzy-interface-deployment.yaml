@@ -1,0 +1,122 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bzy-interface
+  namespace: bzy-personal
+  labels:
+    app: bzy-interface
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: bzy-interface
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: bzy-interface
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      serviceAccountName: bzy-interface
+      terminationGracePeriodSeconds: 15
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+      containers:
+        - name: bzy-interface
+          image: ghcr.io/bzyfuzy/bzy-interface:latest
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: metrics
+              containerPort: 9090
+          env:
+            - name: INTERFACE_ENV
+              value: production
+            - name: INTERFACE_GATEWAY_BRAIN_ADDR
+              value: "bzy-brain:50051"
+            - name: INTERFACE_GATEWAY_RUNNER_ADDR
+              value: "bzy-runner:50052"
+            - name: INTERFACE_AUTH_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: bzy-interface-secrets
+                  key: jwt-secret
+            - name: INTERFACE_REDIS_ADDR
+              valueFrom:
+                configMapKeyRef:
+                  name: bzy-config
+                  key: redis-addr
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bzy-interface
+  namespace: bzy-personal
+spec:
+  selector:
+    app: bzy-interface
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bzy-interface
+  namespace: bzy-personal
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bzy-interface
+  namespace: bzy-personal
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off" # required for SSE
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api.bzy.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bzy-interface
+                port:
+                  name: http

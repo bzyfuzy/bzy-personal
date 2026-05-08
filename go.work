@@ -1,0 +1,8 @@
+go 1.23
+
+use (
+	./pkg
+	./apps/bzy-brain
+	./apps/bzy-runner
+	./apps/bzy-interface
+)

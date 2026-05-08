@@ -1,0 +1,170 @@
+syntax = "proto3";
+
+package bzy.runner.v1;
+
+option go_package = "github.com/bzyfuzy/bzy-personal/gen/runner/v1;runnerv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/duration.proto";
+
+service RunnerService {
+  // Task management
+  rpc EnqueueTask(EnqueueTaskRequest) returns (EnqueueTaskResponse);
+  rpc GetTask(GetTaskRequest) returns (Task);
+  rpc CancelTask(CancelTaskRequest) returns (CancelTaskResponse);
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse);
+
+  // Streaming task logs
+  rpc StreamLogs(StreamLogsRequest) returns (stream LogEntry);
+
+  // Cluster
+  rpc ListNodes(ListNodesRequest) returns (ListNodesResponse);
+
+  // Scheduler
+  rpc CreateSchedule(CreateScheduleRequest) returns (ScheduledJob);
+  rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse);
+  rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse);
+
+  // Workflows
+  rpc CreateWorkflow(CreateWorkflowRequest) returns (WorkflowDef);
+  rpc RunWorkflow(RunWorkflowRequest) returns (WorkflowRun);
+  rpc GetWorkflowRun(GetWorkflowRunRequest) returns (WorkflowRun);
+  rpc CancelWorkflowRun(CancelWorkflowRunRequest) returns (CancelWorkflowRunResponse);
+}
+
+// ─── Tasks ────────────────────────────────────────────────────────────────────
+
+message Task {
+  string id = 1;
+  string type = 2;
+  bytes payload = 3;
+  int32 priority = 4;
+  string status = 5;
+  int32 attempt = 6;
+  int32 max_attempts = 7;
+  google.protobuf.Duration timeout = 8;
+  string trace_id = 9;
+  string worker_id = 10;
+  string error = 11;
+  bytes result = 12;
+  google.protobuf.Timestamp queued_at = 13;
+  google.protobuf.Timestamp started_at = 14;
+  google.protobuf.Timestamp finished_at = 15;
+}
+
+message EnqueueTaskRequest {
+  string type = 1;
+  bytes payload = 2;
+  int32 priority = 3;
+  int32 max_attempts = 4;
+  google.protobuf.Duration timeout = 5;
+  google.protobuf.Timestamp run_at = 6; // optional — for deferred tasks
+  string trace_id = 7;
+}
+
+message EnqueueTaskResponse { string task_id = 1; }
+message GetTaskRequest { string task_id = 1; }
+message CancelTaskRequest { string task_id = 1; }
+message CancelTaskResponse {}
+message ListTasksRequest {
+  string status = 1; // optional filter
+  int32 limit = 2;
+  string page_token = 3;
+}
+message ListTasksResponse {
+  repeated Task tasks = 1;
+  string next_page_token = 2;
+}
+
+// ─── Logs ─────────────────────────────────────────────────────────────────────
+
+message LogEntry {
+  string task_id = 1;
+  string worker_id = 2;
+  string level = 3;
+  string message = 4;
+  google.protobuf.Timestamp timestamp = 5;
+}
+
+message StreamLogsRequest {
+  string task_id = 1;
+  bool follow = 2;       // stream live updates
+  int32 tail_lines = 3;  // last N lines if not following from start
+}
+
+// ─── Cluster ─────────────────────────────────────────────────────────────────
+
+message NodeInfo {
+  string id = 1;
+  string hostname = 2;
+  string addr = 3;
+  int32 concurrency = 4;
+  int32 active_tasks = 5;
+  int32 queued_tasks = 6;
+  string version = 7;
+  google.protobuf.Timestamp started_at = 8;
+  google.protobuf.Timestamp last_seen = 9;
+}
+
+message ListNodesRequest {}
+message ListNodesResponse { repeated NodeInfo nodes = 1; }
+
+// ─── Scheduler ────────────────────────────────────────────────────────────────
+
+message ScheduledJob {
+  string id = 1;
+  string name = 2;
+  string cron_expr = 3;
+  string task_type = 4;
+  bytes payload = 5;
+  bool enabled = 6;
+  google.protobuf.Timestamp last_run = 7;
+  google.protobuf.Timestamp next_run = 8;
+}
+
+message CreateScheduleRequest {
+  string name = 1;
+  string cron_expr = 2;
+  string task_type = 3;
+  bytes payload = 4;
+}
+
+message DeleteScheduleRequest { string id = 1; }
+message DeleteScheduleResponse {}
+message ListSchedulesRequest {}
+message ListSchedulesResponse { repeated ScheduledJob jobs = 1; }
+
+// ─── Workflows ────────────────────────────────────────────────────────────────
+
+message WorkflowDef {
+  string id = 1;
+  string name = 2;
+  google.protobuf.Struct definition = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message WorkflowRun {
+  string id = 1;
+  string def_id = 2;
+  string status = 3;
+  google.protobuf.Struct input = 4;
+  google.protobuf.Struct output = 5;
+  string error = 6;
+  google.protobuf.Timestamp started_at = 7;
+  google.protobuf.Timestamp finished_at = 8;
+}
+
+message CreateWorkflowRequest {
+  string name = 1;
+  google.protobuf.Struct definition = 2;
+}
+
+message RunWorkflowRequest {
+  string def_id = 1;
+  google.protobuf.Struct input = 2;
+}
+
+message GetWorkflowRunRequest { string run_id = 1; }
+message CancelWorkflowRunRequest { string run_id = 1; }
+message CancelWorkflowRunResponse {}

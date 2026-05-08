@@ -1,0 +1,310 @@
+syntax = "proto3";
+
+package bzy.brain.v1;
+
+option go_package = "github.com/bzyfuzy/bzy-personal/gen/brain/v1;brainv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// ─── Chat ─────────────────────────────────────────────────────────────────────
+
+service BrainService {
+  // Chat / Completions
+  rpc Chat(ChatRequest) returns (ChatResponse);
+  rpc ChatStream(ChatRequest) returns (stream ChatStreamChunk);
+
+  // Memory
+  rpc StoreMemory(StoreMemoryRequest) returns (StoreMemoryResponse);
+  rpc RecallMemory(RecallMemoryRequest) returns (RecallMemoryResponse);
+  rpc ForgetMemory(ForgetMemoryRequest) returns (ForgetMemoryResponse);
+
+  // Sessions
+  rpc CreateSession(CreateSessionRequest) returns (Session);
+  rpc GetSession(GetSessionRequest) returns (Session);
+  rpc AddMessage(AddMessageRequest) returns (Message);
+
+  // RAG / Documents
+  rpc IngestDocument(IngestDocumentRequest) returns (IngestDocumentResponse);
+  rpc QueryRAG(QueryRAGRequest) returns (QueryRAGResponse);
+  rpc DeleteDocument(DeleteDocumentRequest) returns (DeleteDocumentResponse);
+
+  // Agents
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
+  rpc RunAgent(RunAgentRequest) returns (RunAgentResponse);
+  rpc RunAgentStream(RunAgentRequest) returns (stream AgentStreamChunk);
+
+  // Workflows
+  rpc CreateWorkflow(CreateWorkflowRequest) returns (WorkflowDef);
+  rpc ExecuteWorkflow(ExecuteWorkflowRequest) returns (WorkflowRun);
+  rpc GetWorkflowRun(GetWorkflowRunRequest) returns (WorkflowRun);
+
+  // Planning
+  rpc DecomposeGoal(DecomposeGoalRequest) returns (Plan);
+}
+
+// ─── Messages ─────────────────────────────────────────────────────────────────
+
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_SYSTEM = 1;
+  ROLE_USER = 2;
+  ROLE_ASSISTANT = 3;
+  ROLE_TOOL = 4;
+}
+
+message ChatMessage {
+  Role role = 1;
+  string content = 2;
+  repeated ToolCall tool_calls = 3;
+  string tool_call_id = 4;
+}
+
+message ToolCall {
+  string id = 1;
+  string name = 2;
+  string arguments = 3;
+}
+
+message ChatRequest {
+  string session_id = 1;
+  string user_id = 2;
+  repeated ChatMessage messages = 3;
+  string model = 4;
+  double temperature = 5;
+  int32 max_tokens = 6;
+  bool stream = 7;
+  repeated ToolSpec tools = 8;
+}
+
+message ToolSpec {
+  string name = 1;
+  string description = 2;
+  google.protobuf.Struct parameters = 3;
+}
+
+message ChatResponse {
+  string id = 1;
+  string model = 2;
+  ChatMessage message = 3;
+  Usage usage = 4;
+  string finish_reason = 5;
+}
+
+message ChatStreamChunk {
+  string delta = 1;
+  bool done = 2;
+  string finish_reason = 3;
+}
+
+message Usage {
+  int32 prompt_tokens = 1;
+  int32 completion_tokens = 2;
+  int32 total_tokens = 3;
+}
+
+// ─── Memory ───────────────────────────────────────────────────────────────────
+
+message Memory {
+  string id = 1;
+  string session_id = 2;
+  string user_id = 3;
+  string type = 4;
+  string content = 5;
+  string summary = 6;
+  float importance = 7;
+  google.protobuf.Struct metadata = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+}
+
+message StoreMemoryRequest {
+  string user_id = 1;
+  string session_id = 2;
+  string type = 3;
+  string content = 4;
+  float importance = 5;
+  google.protobuf.Struct metadata = 6;
+}
+
+message StoreMemoryResponse { string id = 1; }
+
+message RecallMemoryRequest {
+  string user_id = 1;
+  string query = 2;
+  int32 top_k = 3;
+  float min_score = 4;
+}
+
+message RecallMemoryResponse {
+  repeated MemoryResult results = 1;
+}
+
+message MemoryResult {
+  Memory memory = 1;
+  float score = 2;
+}
+
+message ForgetMemoryRequest { string id = 1; }
+message ForgetMemoryResponse {}
+
+// ─── Session ──────────────────────────────────────────────────────────────────
+
+message Session {
+  string id = 1;
+  string user_id = 2;
+  string title = 3;
+  repeated Message messages = 4;
+  string summary = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+message Message {
+  string id = 1;
+  string session_id = 2;
+  Role role = 3;
+  string content = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+message CreateSessionRequest { string user_id = 1; string title = 2; }
+message GetSessionRequest { string id = 1; }
+message AddMessageRequest {
+  string session_id = 1;
+  Role role = 2;
+  string content = 3;
+}
+
+// ─── RAG ─────────────────────────────────────────────────────────────────────
+
+message IngestDocumentRequest {
+  string title = 1;
+  string content = 2;
+  string source = 3;
+  google.protobuf.Struct metadata = 4;
+  string chunk_strategy = 5; // fixed | sentence | paragraph
+  int32 chunk_size = 6;
+  int32 chunk_overlap = 7;
+}
+
+message IngestDocumentResponse {
+  string document_id = 1;
+  int32 chunk_count = 2;
+}
+
+message QueryRAGRequest {
+  string query = 1;
+  string collection = 2;
+  int32 top_k = 3;
+  repeated ChatMessage history = 4;
+}
+
+message QueryRAGResponse {
+  string response = 1;
+  repeated RAGChunk chunks = 2;
+  int64 latency_ms = 3;
+}
+
+message RAGChunk {
+  string id = 1;
+  string content = 2;
+  float score = 3;
+  google.protobuf.Struct metadata = 4;
+}
+
+message DeleteDocumentRequest { string document_id = 1; }
+message DeleteDocumentResponse {}
+
+// ─── Agents ───────────────────────────────────────────────────────────────────
+
+message AgentDef {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string system_prompt = 4;
+  repeated string tool_ids = 5;
+  int32 max_steps = 6;
+}
+
+message ListAgentsRequest {}
+message ListAgentsResponse { repeated AgentDef agents = 1; }
+
+message RunAgentRequest {
+  string agent_id = 1;
+  string session_id = 2;
+  string input = 3;
+}
+
+message RunAgentResponse {
+  string agent_run_id = 1;
+  string answer = 2;
+  int32 steps = 3;
+  int64 latency_ms = 4;
+}
+
+message AgentStreamChunk {
+  string delta = 1;
+  bool done = 2;
+  string step_type = 3; // thought | action | observation | answer
+}
+
+// ─── Workflows ────────────────────────────────────────────────────────────────
+
+message WorkflowDef {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  int32 version = 4;
+  google.protobuf.Struct definition = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message WorkflowRun {
+  string id = 1;
+  string def_id = 2;
+  string status = 3;
+  google.protobuf.Struct input = 4;
+  google.protobuf.Struct output = 5;
+  string error = 6;
+  google.protobuf.Timestamp started_at = 7;
+  google.protobuf.Timestamp finished_at = 8;
+}
+
+message CreateWorkflowRequest {
+  string name = 1;
+  string description = 2;
+  google.protobuf.Struct definition = 3;
+}
+
+message ExecuteWorkflowRequest {
+  string def_id = 1;
+  google.protobuf.Struct input = 2;
+}
+
+message GetWorkflowRunRequest { string run_id = 1; }
+
+// ─── Planning ─────────────────────────────────────────────────────────────────
+
+message Plan {
+  string id = 1;
+  string goal = 2;
+  repeated PlanTask tasks = 3;
+  string status = 4;
+}
+
+message PlanTask {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  string type = 4;
+  string tool_id = 5;
+  repeated string dependencies = 6;
+  string status = 7;
+  int32 order = 8;
+}
+
+message DecomposeGoalRequest {
+  string goal = 1;
+  repeated ChatMessage context = 2;
+}
