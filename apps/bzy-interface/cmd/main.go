@@ -6,9 +6,13 @@ import (
 	"os/signal"
 	"syscall"
 
+	"database/sql"
+	"time"
+
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/redis/go-redis/v9"
 
 	ifconfig "github.com/bzyfuzy/bzy-personal/apps/bzy-interface/config"
@@ -31,6 +35,7 @@ func main() {
 			provideLogger,
 			provideTelemetry,
 			provideRedis,
+			provideDB,
 			provideHealthChecker,
 			provideJWT,
 			auth.NewAPIKeyService,
@@ -40,10 +45,10 @@ func main() {
 			provideMiddleware,
 			streaming.NewHub,
 			ws.NewHub,
-			httpserver.New,
+			httpserver.RegisterRoutes, // provides *gin.Engine
+			httpserver.New,            // consumes *gin.Engine, provides *httpserver.Server
 		),
 		fx.Invoke(
-			httpserver.RegisterRoutes,
 			startHTTPServer,
 		),
 	)
@@ -78,6 +83,19 @@ func provideRedis(cfg *ifconfig.Config) (*redis.Client, error) {
 		Password: cfg.Redis.Password,
 	})
 	return rdb, rdb.Ping(context.Background()).Err()
+}
+
+func provideDB(cfg *ifconfig.Config) (*sql.DB, error) {
+	db, err := sql.Open("pgx", cfg.Database.DSN)
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(cfg.Database.MaxOpenConns)
+	db.SetMaxIdleConns(cfg.Database.MaxIdleConns)
+	db.SetConnMaxLifetime(cfg.Database.ConnMaxLifetime)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return db, db.PingContext(ctx)
 }
 
 func provideHealthChecker(cfg *ifconfig.Config) *health.Checker {

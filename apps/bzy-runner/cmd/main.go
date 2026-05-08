@@ -31,6 +31,12 @@ func provideExecutor(e *executor.LocalExecutor) executor.Executor { return e }
 
 func provideLogWriter(s logstream.Stream) logstream.Writer { return s }
 
+func provideHeartbeat(cfg *runnerconfig.Config, rdb *redis.Client, logger *zap.Logger) *heartbeat.Service {
+	interval := time.Duration(cfg.Cluster.HeartbeatIntervalSec) * time.Second
+	ttl := time.Duration(cfg.Cluster.NodeTTLSec) * time.Second
+	return heartbeat.NewService(rdb, cfg.Cluster.NodeID, cfg.Worker.Concurrency, interval, ttl, logger)
+}
+
 func provideQueue(cfg *runnerconfig.Config, rdb *redis.Client) queue.Queue {
 	return queue.NewRedisQueue(
 		rdb,
@@ -54,7 +60,7 @@ func main() {
 			locks.NewRedisLocker,
 			logstream.NewRedisStream,
 			provideLogWriter,
-			heartbeat.NewService,
+			provideHeartbeat,
 			cluster.NewRegistry,
 			executor.NewLocalExecutor,
 			provideExecutor,

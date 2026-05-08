@@ -9,10 +9,11 @@ import (
 type Config struct {
 	config.Base `mapstructure:",squash"`
 
-	HTTP     HTTP     `mapstructure:"http"`
-	Auth     Auth     `mapstructure:"auth"`
-	Gateway  Gateway  `mapstructure:"gateway"`
-	RateLimit RateLimit `mapstructure:"rate_limit"`
+	HTTP      HTTP            `mapstructure:"http"`
+	Auth      Auth            `mapstructure:"auth"`
+	Gateway   Gateway         `mapstructure:"gateway"`
+	RateLimit RateLimit       `mapstructure:"rate_limit"`
+	Database  config.Database `mapstructure:"database"`
 }
 
 type HTTP struct {
@@ -65,6 +66,12 @@ func Load() (*Config, error) {
 		RateLimit: RateLimit{
 			RequestsPerMin: 120,
 			BurstSize:      20,
+		},
+		Database: config.Database{
+			DSN:             "postgres://bzy:bzy_dev@localhost:5432/bzy_brain?sslmode=disable",
+			MaxOpenConns:    10,
+			MaxIdleConns:    5,
+			ConnMaxLifetime: 5 * time.Minute,
 		},
 	}
 	return cfg, config.Load("INTERFACE", cfg)
